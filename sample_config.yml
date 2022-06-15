@@ -1,0 +1,4 @@
+mails:
+  - imap_server: "imap.gmail.com"
+    login: "your_login"
+    password: "your_password"
