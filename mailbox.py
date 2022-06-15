@@ -1,3 +1,4 @@
+"""Main application"""
 from controllers import Application
 
 
