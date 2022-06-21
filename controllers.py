@@ -10,9 +10,12 @@ from email import message_from_bytes
 from yaml import safe_load, safe_dump
 from tabulate import tabulate
 
+from re import match, search
+
 
 class Application:
     """Class repesented main app"""
+
     def __init__(self, config_file: str = 'config.yml') -> None:
         self.config_file = config_file
         self.mail_list = self._get_mails_list_from_yml()
@@ -40,27 +43,42 @@ class Application:
                 continue
         return mail_list
 
-    def run(self):
+    def run(self, keyword: str = None, search_range: int = 0, login: str = None):
         """Start the app"""
+        regex = r'[a-z0-9.-_]+@[a-z0-9]+[.][a-z]{2,3}'
         for email in self.mail_list['mails']:
-            mailbox = Mailbox(email['login'], email['password'], email['imap_server'])
-            mailbox.connect_to_mail()
-            mailbox.select_folder()
-            new_mails = mailbox.check_new_mails()
-            mails = []
+            if match(regex, email['login']) is not None:
+                if login is None or email['login'].lower() == login.lower():
+                    try:
+                        mailbox = Mailbox(email['login'], email['password'], email['imap_server'])
+                        mailbox.connect_to_mail()
+                        mailbox.select_folder()
+                        if keyword is None:
+                            new_mails = mailbox.check_new_mails()
+                        else:
+                            new_mails = mailbox.search_in_mails(keyword, search_range)
+                    except imaplib.IMAP4.error:
+                        print(f'Authentication failed {email["login"]}')
+                        return None
+                    mails = []
 
-            for mail in new_mails:
-                mails.append(mailbox.get_header(mail))
+                    for mail in new_mails:
+                        mails.append(mailbox.get_header(mail))
 
-            if len(mails) != 0:
-                print(f'\t\t{mailbox.login}\n\
-                    {tabulate(mails, headers=["Title", "From"], tablefmt="github")}\n')
+                    if len(mails) != 0:
+                        print(mailbox.login)
+                        print(tabulate(mails, headers=["Title", "From"], tablefmt="github"))
+                    elif keyword is None:
+                        print(f'On mailbox {email["login"]} don\'t have new mails')
+                    elif keyword is not None:
+                        print(f'No matching emails were found in {email["login"]}')
             else:
-                print(f'On mailbox {mailbox.login} don\'t have new mails')
+                print(f'Your login {email["login"]} isn\'t correct mail address')
 
 
 class Mailbox:
     """Class represented mailbox"""
+
     def __init__(self, login: str = None, password: str = None, imap_server: str = None) -> None:
         self.login = login if login is not None else input('imap_server: ')
         self.password = password if password is not None else input('login: ')
@@ -139,6 +157,27 @@ class Mailbox:
         content = [subject, sender]
         return content
 
-    def search_in_mails(self) -> list:
+    def search_in_mails(self, keyword: str, seached_range: int = 0) -> list:
         """Search"""
-        pass
+        result = []
+        mails_ids = self._get_mails_ids_from_server()[-seached_range:]
+        for mail_id in mails_ids:
+            mail = self.get_message(mail_id)
+            in_content = False
+            for part in mail.walk():
+                if part.get_content_type() == 'text/plain':
+                    if search(keyword, part.get_payload()) is not None:
+                        in_content = True
+                        break
+            search_result = any([
+                search(keyword, mail['Subject'] if mail['Subject'] is not None else ""),
+                search(keyword, mail['From'] if mail['From'] is not None else ""),
+                in_content
+            ])
+
+            if search_result:
+                result.append(mail_id)
+            else:
+                continue
+
+        return result
