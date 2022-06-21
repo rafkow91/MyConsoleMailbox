@@ -6,11 +6,10 @@ from json import load, dump
 from email import message
 from email.header import decode_header
 from email import message_from_bytes
+from re import match, search
 
 from yaml import safe_load, safe_dump
 from tabulate import tabulate
-
-from re import match, search
 
 
 class Application:
